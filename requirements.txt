@@ -1,0 +1,13 @@
+beautifulsoup4==4.15.0
+bs4==0.0.2
+certifi==2026.6.17
+charset-normalizer==3.4.7
+idna==3.18
+mwparserfromhell==0.7.2
+packaging==26.2
+pywikibot==11.4.2
+PyYAML==6.0.3
+requests==2.34.2
+soupsieve==2.8.4
+typing_extensions==4.15.0
+urllib3==2.7.0
