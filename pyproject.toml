@@ -13,6 +13,11 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "beautifulsoup4==4.15.0",
+    "pywikibot",
+    "PyYAML==6.0.3",
+]
 
 [project.urls]
 Homepage = "https://github.com/Emojigit/zhwiki_nomination_daily_digest"
