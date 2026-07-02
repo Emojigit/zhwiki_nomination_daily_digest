@@ -1,0 +1,19 @@
+[project]
+name = "zhwiki_nomination_daily_digest"
+version = "0.0.1"
+authors = [
+  { name="1F616EMO", email="root@1f616emo.xyz" },
+]
+description = "Daily digest of updates on Chinese Wikipedia DYKC, GAN and FAN"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/Emojigit/zhwiki_nomination_daily_digest"
+Issues = "https://github.com/Emojigit/zhwiki_nomination_daily_digest/issues"
