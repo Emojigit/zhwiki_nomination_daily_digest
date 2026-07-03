@@ -1,5 +1,6 @@
 """The DYKC Daily Digest newsletter generator and sender bot."""
 
+import pickle
 from datetime import datetime, timezone
 from pywikibot import Site, Page, logging
 from pywikibot.exceptions import Error as PWBError
@@ -20,8 +21,8 @@ def run_bot(
 ):
     old_votes = None
     try:
-        with open(old_votes_path, 'r', encoding='utf-8') as f:
-            old_votes = dykc.import_votes_from_file(f)
+        with open(old_votes_path, 'rb') as f:
+            old_votes = pickle.load(f)
     except FileNotFoundError:
         logging.warning(
             f"Old votes file {old_votes_path} not found. Assuming this is the first run.")
@@ -92,8 +93,8 @@ def run_bot(
                         logging.error(f"Error sending newsletter: {e}")
 
     # Save new votes to file for next run
-    with open(old_votes_path, 'w', encoding='utf-8') as f:
-        dykc.export_votes_to_file(new_votes, f)
+    with open(old_votes_path, 'wb') as f:
+        pickle.dump(new_votes, f)
         logging.info(f"Saved new votes to {old_votes_path}.")
 
 

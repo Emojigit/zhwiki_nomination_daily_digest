@@ -45,7 +45,7 @@ Root files (user-edited, gitignored secrets):
    3. If a previous snapshot exists, build a `DYKCDiffReport` via
       `parsers.dykc.generate_diff_report`. For each removed entry, it toggles to the
       article's talk page (via `PreloadingGenerator`) and inspects the most recent
-      `DYKEntry/archive` template to determine pass/fail.
+      `DYKVoteCount/archive` template to determine pass/fail.
    4. Render Wikitext with `newsletters.dykc.generate_newsletter_content` (Wikitext
       strings are defined as module-level constants in that file).
    5. Deliver per `send_mode`:

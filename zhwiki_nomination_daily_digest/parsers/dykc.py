@@ -1,24 +1,26 @@
 """Parse contents of Did You Know (DYK) nomiation pages and discussion pages."""
 
-from io import TextIOWrapper
+from datetime import datetime
+from collections import OrderedDict
 from dataclasses import dataclass
 from pywikibot import Site, Page
 from pywikibot.pagegenerators import PreloadingGenerator
+from pywikibot.textlib import extract_templates_and_params
 from bs4 import BeautifulSoup
 
 
 @dataclass(frozen=True)
-class DYKEntry:
+class DYKVoteCount:
     """Vote counts of a DYKC entry."""
 
     vote_support: int
     vote_oppose: int
     vote_problematic: int
 
-    def __sub__(self, other: "DYKEntry") -> "DYKEntry":
-        if not isinstance(other, DYKEntry):
+    def __sub__(self, other: "DYKVoteCount") -> "DYKVoteCount":
+        if not isinstance(other, DYKVoteCount):
             return NotImplemented
-        return DYKEntry(
+        return DYKVoteCount(
             vote_support=self.vote_support - other.vote_support,
             vote_oppose=self.vote_oppose - other.vote_oppose,
             vote_problematic=self.vote_problematic - other.vote_problematic,
@@ -28,7 +30,22 @@ class DYKEntry:
         return self.vote_support == 0 and self.vote_oppose == 0 and self.vote_problematic == 0
 
 
-def get_active_votes(dykc_page_content: str) -> dict[str, DYKEntry]:
+@dataclass(frozen=True)
+class DYKEntry:
+    """Metadata of a DYKC entry. Data collected from DYKEntry templates."""
+
+    entry_hash: str
+    entry_article: str
+    entry_question: str
+    entry_image: str
+    entry_type: str
+    entry_author: str
+    entry_nominator: str
+    entry_timestamp: datetime
+    entry_votes: DYKVoteCount
+
+
+def get_active_votes(dykc_page_content: str, dykc_page_templates: list[tuple[str, OrderedDict[str, str]]]) -> OrderedDict[str, DYKEntry]:
     """Parse the HTML of a DYKC nomination and voting page, returns the entries.
 
     Parameters
@@ -38,8 +55,8 @@ def get_active_votes(dykc_page_content: str) -> dict[str, DYKEntry]:
 
     Returns
     -------
-    dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts.
+    OrderedDict[str, DYKEntry]
+        Dictionary of article titles to DYKC entries and vote counts.
     """
     soup = BeautifulSoup(dykc_page_content, 'html.parser')
 
@@ -54,7 +71,7 @@ def get_active_votes(dykc_page_content: str) -> dict[str, DYKEntry]:
     vote_support = 0
     vote_oppose = 0
     vote_problematic = 0
-    entries: dict[str, DYKEntry] = {}
+    entry_votes: dict[str, DYKVoteCount] = {}
 
     for element in reversed(all_elements):
         classes = element.get('class', [])
@@ -65,9 +82,9 @@ def get_active_votes(dykc_page_content: str) -> dict[str, DYKEntry]:
             vote_oppose += 1
         elif 'zhwpDYKwq' in classes:
             vote_problematic += 1
-        elif 'dykarticle' in classes:
-            article_title = element.get_text().strip().replace(' ', '_')
-            entries[article_title] = DYKEntry(
+        elif 'dykentry_hash' in classes:
+            entry_hash = element.get_text().strip()
+            entry_votes[entry_hash] = DYKVoteCount(
                 vote_support=vote_support,
                 vote_oppose=vote_oppose,
                 vote_problematic=vote_problematic,
@@ -77,11 +94,37 @@ def get_active_votes(dykc_page_content: str) -> dict[str, DYKEntry]:
             vote_oppose = 0
             vote_problematic = 0
 
+    entries: OrderedDict[str, DYKEntry] = OrderedDict()
+
+    for data in dykc_page_templates:
+        if data[0] != "DYKEntry":
+            continue
+
+        params = data[1]
+        entry_hash = params.get('hash')
+        if entry_hash not in entry_votes:
+            continue
+
+        entry_article = params.get('article', '').replace('_', ' ')
+
+        entries[entry_article] = DYKEntry(
+            entry_hash=entry_hash,
+            entry_article=entry_article,
+            entry_author=params.get('author', ''),
+            entry_question=params.get('question', ''),
+            entry_image=params.get('image', ''),
+            entry_type=params.get('type', ''),
+            entry_nominator=params.get('nominator', ''),
+            entry_timestamp=datetime.utcfromtimestamp(
+                int(params.get('timestamp', 0))),
+            entry_votes=entry_votes[entry_hash]
+        )
+
     return entries
 
 
-def get_active_votes_from_page(page: Page, force: bool = False) -> dict[str, DYKEntry]:
-    """Parse the HTML of a DYKC nomination and voting page, returns the entries.
+def get_active_votes_from_page(page: Page, force: bool = False) -> OrderedDict[str, DYKEntry]:
+    """Parse a DYKC nomination and voting page, returns the entries.
 
     Parameters
     ----------
@@ -92,62 +135,82 @@ def get_active_votes_from_page(page: Page, force: bool = False) -> dict[str, DYK
 
     Returns
     -------
-    dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts.
+    OrderedDict[str, DYKEntry]
+        Dictionary of article titles to DYKC entries and vote counts.
     """
 
     content = page.get_parsed_page(force=force)
-    return get_active_votes(content)
+    templates = page.raw_extracted_templates
+    return get_active_votes(content, templates)
 
 
-def export_votes_to_file(vote_data: dict[str, DYKEntry], fd: TextIOWrapper):
-    """Export the vote data to a file.
+def get_active_votes_from_page_revision(site: Site, revision: int) -> OrderedDict[str, DYKEntry]:
+    """Parse a DYKC nomination and voting page at a specific revision, returns the entries.
 
     Parameters
     ----------
-    vote_data : dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts.
-    fd : TextIOWrapper
-        File descriptor to write the data to.
+    revision : int
+        Revision to parse
+
+    Returns
+    -------
+    OrderedDict[str, DYKEntry]
+        Dictionary of article titles to DYKC entries and vote counts.
     """
-    for title, entry in vote_data.items():
-        fd.write(
-            f"{title}\t{entry.vote_support}\t{entry.vote_oppose}\t{entry.vote_problematic}\n")
+
+    req = site.simple_request(
+        action='parse',
+        oldid=revision,
+        prop=[
+            'text',
+            'wikitext',
+        ],
+    )
+    data = req.submit()
+
+    try:
+        content = data['parse']['text']['*']
+        wikitext = data['parse']['wikitext']['*']
+    except KeyError as e:
+        raise KeyError(f'API parse response lacks {e} key') from e
+
+    templates = extract_templates_and_params(wikitext, True, True)
+    return get_active_votes(content, templates)
 
 
-def get_vote_differences(old_votes: dict[str, DYKEntry], new_votes: dict[str, DYKEntry]) -> dict[str, DYKEntry]:
+def get_vote_differences(old_votes: OrderedDict[str, DYKEntry], new_votes: OrderedDict[str, DYKEntry]) -> dict[str, DYKVoteCount]:
     """Calculate the differences between two sets of vote data.
 
     Parameters
     ----------
-    old_votes : dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts from the previous state.
-    new_votes : dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts from the current state.
+    old_votes : list[DYKEntry]
+        List of entries from the previous state.
+    new_votes : dict[str, DYKVoteCount]
+        List of entries from the current state.
 
     Returns
     -------
-    dict[str, DYKEntry]
+    dict[str, DYKVoteCount]
         Dictionary of page titles to entry metadata and vote count differences.
     """
-    differences: dict[str, DYKEntry] = {}
-    for title, new_entry in new_votes.items():
-        old_entry = old_votes.get(title)
-        if old_entry is not None:
-            diff_entry = new_entry - old_entry
-            if not diff_entry.is_zero():
-                differences[title] = diff_entry
+    differences: dict[str, DYKVoteCount] = {}
+    for article, entry in new_votes.items():
+        if article not in old_votes:
+            continue
+        diff = entry.entry_votes - old_votes[article].entry_votes
+        if not diff.is_zero():
+            differences[article] = diff
     return differences
 
 
-def get_removed_entries(old_votes: dict[str, DYKEntry], new_votes: dict[str, DYKEntry]) -> list[str]:
+def get_removed_entries(old_votes: OrderedDict[str, DYKEntry], new_votes: OrderedDict[str, DYKEntry]) -> list[str]:
     """Get the list of entries that were present in old_votes but not in new_votes.
 
     Parameters
     ----------
-    old_votes : dict[str, DYKEntry]
+    old_votes : OrderedDict[str, DYKEntry]
         Dictionary of page titles to entry metadata and vote counts from the previous state.
-    new_votes : dict[str, DYKEntry]
+    new_votes : OrderedDict[str, DYKEntry]
         Dictionary of page titles to entry metadata and vote counts from the current state.
 
     Returns
@@ -162,54 +225,26 @@ def get_removed_entries(old_votes: dict[str, DYKEntry], new_votes: dict[str, DYK
     return removed_entries
 
 
-def get_added_entries(old_votes: dict[str, DYKEntry], new_votes: dict[str, DYKEntry]) -> dict[str, DYKEntry]:
+def get_added_entries(old_votes: OrderedDict[str, DYKEntry], new_votes: OrderedDict[str, DYKEntry]) -> OrderedDict[str, DYKEntry]:
     """Get the list of entries that were present in new_votes but not in old_votes.
 
     Parameters
     ----------
-    old_votes : dict[str, DYKEntry]
+    old_votes : OrderedDict[str, DYKEntry]
         Dictionary of page titles to entry metadata and vote counts from the previous state.
-    new_votes : dict[str, DYKEntry]
+    new_votes : OrderedDict[str, DYKEntry]
         Dictionary of page titles to entry metadata and vote counts from the current state.
 
     Returns
     -------
-    dict[str, DYKEntry]
+    OrderedDict[str, DYKEntry]
         List of page titles that were added.
     """
-    added_entries = {}
+    added_entries = OrderedDict()
     for title, entry in new_votes.items():
         if title not in old_votes:
             added_entries[title] = entry
     return added_entries
-
-
-def import_votes_from_file(fd: TextIOWrapper) -> dict[str, DYKEntry]:
-    """Import the vote data from a file.
-
-    Parameters
-    ----------
-    fd : TextIOWrapper
-        File descriptor to read the data from.
-
-    Returns
-    -------
-    dict[str, DYKEntry]
-        Dictionary of page titles to entry metadata and vote counts.
-    """
-    vote_data: dict[str, DYKEntry] = {}
-    for line in fd:
-        sline = line.strip()
-        if sline == '':
-            continue
-
-        title, support, oppose, problematic = sline.split('\t')
-        vote_data[title] = DYKEntry(
-            vote_support=int(support),
-            vote_oppose=int(oppose),
-            vote_problematic=int(problematic),
-        )
-    return vote_data
 
 
 def get_ended_vote_status_from_talkpage(page: Page) -> bool:
@@ -247,20 +282,21 @@ def get_ended_vote_status_from_talkpage(page: Page) -> bool:
 class DYKCDiffReport:
     """Report of differeneces between DYKC vote counts."""
 
-    new_votes: dict[str, DYKEntry]
+    old_votes: OrderedDict[str, DYKEntry]
+    new_votes: OrderedDict[str, DYKEntry]
     removed_entries: dict[str, bool]
-    vote_differences: dict[str, DYKEntry]
-    new_entries: dict[str, DYKEntry]
+    vote_differences: OrderedDict[str, DYKVoteCount]
+    new_entries: OrderedDict[str, DYKEntry]
 
 
-def generate_diff_report(old_votes: dict[str, DYKEntry], new_votes: dict[str, DYKEntry], site: Site) -> DYKCDiffReport:
+def generate_diff_report(old_votes: OrderedDict[str, DYKEntry], new_votes: OrderedDict[str, DYKEntry], site: Site) -> DYKCDiffReport:
     """Generate a report of differences between DYKC vote counts.
 
     Parameters
     ----------
-    old_votes : dict[str, DYKEntry]
+    old_votes : OrderedDict[str, DYKEntry]
         Data of old vote.
-    new_votes : dict[str, DYKEntry]
+    new_votes : OrderedDict[str, DYKEntry]
         Data of new vote.
 
     Returns
@@ -283,6 +319,7 @@ def generate_diff_report(old_votes: dict[str, DYKEntry], new_votes: dict[str, DY
     new_entries = get_added_entries(old_votes, new_votes)
 
     return DYKCDiffReport(
+        old_votes=old_votes,
         new_votes=new_votes,
         removed_entries=removed_entries,
         vote_differences=vote_differences,

@@ -221,6 +221,7 @@ __marimo__/
 
 apicache/
 config.yaml
+old_votes
 old_votes.txt
 throttle.ctrl
 user-config.py
