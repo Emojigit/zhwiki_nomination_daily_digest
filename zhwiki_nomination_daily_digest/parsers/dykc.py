@@ -278,7 +278,7 @@ def get_ended_vote_status_from_talkpage(page: Page) -> bool:
     return dykarchive[1].get('result') == '^'
 
 
-@dataclass
+@dataclass(frozen=True)
 class DYKCDiffReport:
     """Report of differeneces between DYKC vote counts."""
 
@@ -287,6 +287,19 @@ class DYKCDiffReport:
     removed_entries: dict[str, bool]
     vote_differences: OrderedDict[str, DYKVoteCount]
     new_entries: OrderedDict[str, DYKEntry]
+
+    @property
+    def has_changes(self) -> bool:
+        """Check if there are changes in this report. If False, a daily digest
+        is probably not needed.
+
+        Returns
+        -------
+        bool
+            Whether there are changes.
+        """
+
+        return bool(self.removed_entries or self.vote_differences or self.new_entries)
 
 
 def generate_diff_report(old_votes: OrderedDict[str, DYKEntry], new_votes: OrderedDict[str, DYKEntry], site: Site) -> DYKCDiffReport:

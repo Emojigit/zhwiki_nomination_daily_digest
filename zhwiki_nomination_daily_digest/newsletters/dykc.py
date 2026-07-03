@@ -1,8 +1,12 @@
 """Code for generating daily digest newsletters."""
 
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Mapping
+
+from pywikibot import Site, logging
 
 from ..parsers.dykc import DYKEntry, DYKVoteCount, DYKCDiffReport
+from . import DailyDigestSendMode, send_daily_digest
 
 DELTA_COLOR_POSITIVE = 'var(--color-content-added,#006400)'
 DELTA_COLOR_NEGATIVE = 'var(--color-content-removed,#8b0000)'
@@ -58,7 +62,7 @@ def generate_new_entry_notes(entry: DYKEntry) -> str:
     return f"<small>（{nomin_string}；類別：{entry.entry_type}）</small>"
 
 
-def generate_newsletter_content(diff_report: DYKCDiffReport) -> Optional[str]:
+def generate_newsletter_content(diff_report: DYKCDiffReport) -> str:
     """Generate a newsletter ready for posting onto talk pages.
 
     Parameters
@@ -68,12 +72,9 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> Optional[str]:
 
     Returns
     -------
-    Optional[str]
-        The report in Wikitext. None means no changes and no newsletter is needed.
+    str
+        The report in Wikitext.
     """
-
-    if len(diff_report.new_entries) == 0 and len(diff_report.vote_differences) == 0 and len(diff_report.removed_entries) == 0:
-        return None
 
     rows = []
     rows.append('自上次簡報以來，以下是[[WP:DYKC|新條目評選]]的變化：')
@@ -114,3 +115,25 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> Optional[str]:
     rows.append('~~~~')
 
     return '\n'.join(rows)
+
+
+def send_newsletter_by_diff_report(site: Site, diff_report: DYKCDiffReport, config: Mapping):
+    target_title = config.get('target_title')
+    send_mode = config.get('send_mode', DailyDigestSendMode.DIRECT)
+    summary = config.get('summary', '發送新條目評選每日簡報')
+
+    if target_title is None:
+        raise ValueError("Invalid target_title")
+    if send_mode not in DailyDigestSendMode:
+        raise ValueError(f"Invalid send_mode: {send_mode}")
+
+    newsletter_content = generate_newsletter_content(diff_report)
+
+    now = datetime.now(timezone.utc)
+    newsletter_title = f"新條目評選每日簡報（{now.year}年{now.month}月{now.day}日）"
+
+    logging.info(f"Newsletter title: {newsletter_title}")
+    logging.info("Newsletter content:\n" + newsletter_content)
+
+    send_daily_digest(site, newsletter_title,
+                      newsletter_content, target_title, send_mode, summary)

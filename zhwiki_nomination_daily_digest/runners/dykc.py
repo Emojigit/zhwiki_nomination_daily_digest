@@ -1,24 +1,17 @@
 """The DYKC Daily Digest newsletter generator and sender bot."""
 
 import pickle
-from datetime import datetime, timezone
-from pywikibot import Site, Page, logging
-from pywikibot.exceptions import Error as PWBError
+from typing import Mapping
+
 import yaml
+from pywikibot import Site, Page, logging
 
 from ..parsers import dykc
 from ..newsletters import dykc as ndykc
-from . import DailyDigestSendMode, send_daily_digest
 
 
-def run_bot(
-    old_votes_path: str,
-    site: Site,
-    dykc_title: str = 'Wikipedia:新条目推荐/候选',
-    target_title: str = 'User:1F616EMO/條目評選每日簡報/新條目評選',
-    send_mode: DailyDigestSendMode = DailyDigestSendMode.DRY_RUN,
-    summary: str = '發送新條目評選每日簡報'
-):
+def run_bot(site: Site, config: Mapping) -> int:
+    old_votes_path = config.get('old_votes_path', './old_votes')
     old_votes = None
     try:
         with open(old_votes_path, 'rb') as f:
@@ -27,25 +20,24 @@ def run_bot(
         logging.warning(
             f"Old votes file {old_votes_path} not found. Assuming this is the first run.")
 
+    dykc_title = config.get('dykc_title', 'Wikipedia:新条目推荐/候选')
     dykc_page = Page(site, dykc_title)
     new_votes = dykc.get_active_votes_from_page(dykc_page)
 
     if old_votes is not None:
         diff_report = dykc.generate_diff_report(old_votes, new_votes, site)
-        newsletter_content = ndykc.generate_newsletter_content(diff_report)
 
-        if newsletter_content is None:
+        if not diff_report.has_changes:
             logging.info("No changes since last send, quitting.")
             return 0
 
-        now = datetime.now(timezone.utc)
-        newsletter_title = f"新條目評選每日簡報（{now.year}年{now.month}月{now.day}日）"
-
-        logging.info(f"Newsletter title: {newsletter_title}")
-        logging.info("Newsletter content:\n" + newsletter_content)
-
-        send_daily_digest(site, newsletter_title,
-                          newsletter_content, target_title, send_mode, summary)
+        newsletter_config = config.get('newsletter', {})
+        if newsletter_config.get('enabled', False):
+            logging.info("Sending on-wiki newsletter...")
+            ndykc.send_newsletter_by_diff_report(
+                site, diff_report, newsletter_config)
+        else:
+            logging.info("Skipping on-wiki newsletter.")
 
     # Save new votes to file for next run
     with open(old_votes_path, 'wb') as f:
@@ -67,18 +59,7 @@ def main(config_file_path: str = './config.yaml') -> int:
     # Configured in user-config.py, not in config.yaml
     site = Site()
 
-    run_bot(
-        old_votes_path=config['old_votes_path'],
-        site=site,
-        dykc_title=config.get('dykc_title', 'Wikipedia:新条目推荐/候选'),
-        target_title=config.get(
-            'target_title', 'User:1F616EMO/條目評選每日簡報/新條目評選'),
-        send_mode=DailyDigestSendMode(config.get(
-            'send_mode', DailyDigestSendMode.DRY_RUN)),
-        summary=config.get('summary', '發送新條目評選每日簡報')
-    )
-
-    return 0
+    return run_bot(site, config)
 
 
 if __name__ == "__main__":
