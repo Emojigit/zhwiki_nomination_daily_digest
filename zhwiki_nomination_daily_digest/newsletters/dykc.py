@@ -81,7 +81,7 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> str:
 
     # New entries
     rows.append(HEADING_NEW_ENTRY.format(num=len(diff_report.new_entries)))
-    for title, entry in reversed(diff_report.new_entries.items()):
+    for title, entry in diff_report.new_entries.items():
         linkicon = DYKC_LINK_ICON.format(pagename=title)
         votes_display = generate_votes_display(entry.entry_votes)
         entry_notes = generate_new_entry_notes(entry)
@@ -91,7 +91,7 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> str:
     # Vote Differences
     rows.append(HEADING_CHANGES_ENTRY.format(
         num=len(diff_report.vote_differences)))
-    for title, delta in reversed(diff_report.vote_differences.items()):
+    for title, delta in diff_report.vote_differences.items():
         entry = diff_report.new_votes.get(title)
         entry_votes = entry.entry_votes
 
@@ -104,7 +104,7 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> str:
     # Removed entries
     rows.append(HEADING_ENDED_ENTRY.format(
         num=len(diff_report.removed_entries)))
-    for title, passed in reversed(diff_report.removed_entries.items()):
+    for title, passed in diff_report.removed_entries.items():
         icon = (REMOVED_ICON_PASSED if passed else REMOVED_ICON_FAILED).format(
             pagename=title)
         result = REMOVED_RESULT_PASSED if passed else REMOVED_RESULT_FAILED
