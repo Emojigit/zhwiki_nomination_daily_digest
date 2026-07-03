@@ -110,8 +110,9 @@ def generate_message_content(diff_report: DYKCDiffReport) -> str:
         num=len(diff_report.removed_entries)))
     for title, passed in diff_report.removed_entries.items():
         result = REMOVED_RESULT_PASSED if passed else REMOVED_RESULT_FAILED
+        fragment = "#新条目推荐讨论" if passed else "#未通过的新条目推荐讨论"
         rows.append(REMOVED_ROW.format(
-            pagelink=DYKC_SHORT_LINK + '#' + title,
+            pagelink="https://zh.wikipedia.org/wiki/" + title + fragment,
             pagename=title,
             result=result
         ))
