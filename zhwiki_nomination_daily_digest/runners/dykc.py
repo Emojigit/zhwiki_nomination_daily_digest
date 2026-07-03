@@ -8,6 +8,7 @@ from pywikibot import Site, Page, logging
 
 from ..parsers import dykc
 from ..newsletters import dykc as ndykc
+from ..telegram import dykc as tdykc
 
 
 def run_bot(site: Site, config: Mapping) -> int:
@@ -36,6 +37,13 @@ def run_bot(site: Site, config: Mapping) -> int:
             logging.info("Sending on-wiki newsletter...")
             ndykc.send_newsletter_by_diff_report(
                 site, diff_report, newsletter_config)
+        else:
+            logging.info("Skipping on-wiki newsletter.")
+
+        telegram_config = config.get('telegram', {})
+        if telegram_config.get('enabled', False):
+            logging.info("Sending Telegram messages...")
+            tdykc.send_newsletter_by_diff_report(diff_report, telegram_config)
         else:
             logging.info("Skipping on-wiki newsletter.")
 
