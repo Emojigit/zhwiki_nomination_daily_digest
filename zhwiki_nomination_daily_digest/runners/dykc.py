@@ -8,7 +8,7 @@ import yaml
 
 from ..parsers import dykc
 from ..newsletters import dykc as ndykc
-from . import DailyDigestSendMode
+from . import DailyDigestSendMode, send_daily_digest
 
 
 def run_bot(
@@ -44,53 +44,8 @@ def run_bot(
         logging.info(f"Newsletter title: {newsletter_title}")
         logging.info("Newsletter content:\n" + newsletter_content)
 
-        if send_mode == DailyDigestSendMode.MMS:
-            logging.info(
-                f"Sending newsletter via MassMessage to list {target_title}...")
-            token = site.get_tokens(['csrf']).get('csrf')
-            request = site.simple_request(
-                action='massmessage',
-                spamlist=target_title,
-                subject=newsletter_title,
-                message=newsletter_content,
-                token=token,
-            )
-            request.submit()
-            logging.info("Newsletter sent via MassMessage.")
-        else:
-            # Both DIRECT and DRY_RUN needs to fetch a list of send targets from the given page.
-            logging.info(
-                f"Fetching list of send targets from {target_title}...")
-            target_page = Page(site, target_title)
-            target_list = []
-
-            for target in target_page.linkedPages():
-                namespace = target.namespace()
-
-                if namespace == 4 or namespace % 2 == 1:
-                    logging.info(f"Get  {target.title()}")
-                    target_list.append(target)
-                else:
-                    logging.info(f"Skip {target.title()}")
-
-            if send_mode == DailyDigestSendMode.DRY_RUN:
-                logging.info("Dry run mode: not sending newsletters.")
-            elif send_mode == DailyDigestSendMode.DIRECT:
-                logging.info(
-                    "Direct send mode: sending newsletters to each target...")
-                for target in target_list:
-                    logging.info(f"Sending newsletter to {target.title()}...")
-                    try:
-                        site.editpage(
-                            page=target,
-                            summary=summary,
-                            bot=True,
-                            section="new",
-                            sectiontitle=newsletter_title,
-                            text=newsletter_content,
-                        )
-                    except PWBError as e:
-                        logging.error(f"Error sending newsletter: {e}")
+        send_daily_digest(site, newsletter_title,
+                          newsletter_content, target_title, send_mode, summary)
 
     # Save new votes to file for next run
     with open(old_votes_path, 'wb') as f:
