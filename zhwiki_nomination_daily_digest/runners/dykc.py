@@ -127,4 +127,5 @@ def main(config_file_path: str = './config.yaml') -> int:
 
 if __name__ == "__main__":
     import sys
-    sys.exit(main())
+    config_path = sys.argv[1] if len(sys.argv) > 1 else './config.yaml'
+    sys.exit(main(config_path))
