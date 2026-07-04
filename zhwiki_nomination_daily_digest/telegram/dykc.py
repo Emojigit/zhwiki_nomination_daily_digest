@@ -139,7 +139,7 @@ def generate_telegraph_content(diff_report: DYKCDiffReport) -> list:
         f'共有 {len(diff_report.new_entries)} 個新條目提交評選：',
     ]))
     nodes.append(_tag(
-        'ol',
+        'ul',
         [
             _tag('li', generate_new_entry_line(entry))
             for entry in diff_report.new_entries.values()
@@ -152,7 +152,7 @@ def generate_telegraph_content(diff_report: DYKCDiffReport) -> list:
         f'共有 {len(diff_report.vote_differences)} 個新條目有票數變化：',
     ]))
     nodes.append(_tag(
-        'ol',
+        'ul',
         [
             _tag('li', generate_vote_diff_line(
                 diff_report.new_votes.get(title),
@@ -168,7 +168,7 @@ def generate_telegraph_content(diff_report: DYKCDiffReport) -> list:
         f'共有 {len(diff_report.removed_entries)} 個新條目評選已完結：',
     ]))
     nodes.append(_tag(
-        'ol',
+        'ul',
         [
             _tag('li', generate_vote_ended_line(title, passed))
             for title, passed in diff_report.removed_entries.items()
