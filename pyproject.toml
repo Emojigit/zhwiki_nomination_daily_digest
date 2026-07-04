@@ -21,7 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 telegram = [
-    "pyTelegramBotAPI==4.34.0"
+    "pyTelegramBotAPI==4.34.0",
+    "telegraph==2.2.0"
 ]
 
 [project.urls]

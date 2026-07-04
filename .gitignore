@@ -223,7 +223,10 @@ apicache/
 config.yaml
 old_votes
 old_votes.txt
+telegraph_token.txt
 throttle.ctrl
 user-config.py
 user-password.py
 *.lwp
+
+~*

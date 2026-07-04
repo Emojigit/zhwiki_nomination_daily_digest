@@ -9,6 +9,12 @@ newsletter:
 telegram:
   enabled: false
   bot_token: '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11'
+  telegraph:
+    access_token_path: ./telegraph_token.txt
+    auto_create_account: true
+    author_short_name: 每日評選簡報
+    author_name: 中文維基百科每日評選簡報
+    author_url: https://zh.wikipedia.org/wiki/User:1F616EMO/%E6%A2%9D%E7%9B%AE%E8%A9%95%E9%81%B8%E6%AF%8F%E6%97%A5%E7%B0%A1%E5%A0%B1/%E6%96%B0%E6%A2%9D%E7%9B%AE%E8%A9%95%E9%81%B8
   chats:
     -123456789:
       enabled: false

@@ -1,132 +1,199 @@
 """Telegram sender of the DYKC Daily Digest."""
 
-from functools import cache
-from time import sleep
+from typing import Mapping
 from datetime import datetime, timezone
-from typing import Mapping, Callable
 
-from pywikibot import Site, Page, User, logging
-from pywikibot.exceptions import APIError
+from telebot.types import LinkPreviewOptions
 
 from ..parsers.dykc import DYKEntry, DYKVoteCount, DYKCDiffReport
-from . import send_daily_digest
+from . import _tag, publish_telegraph_page, send_telegram_messages
 
-UNORDERED_LIST_MARKER = '• '
-PLAIN_LIST_MARKER = " • "
-
-DYKC_SHORT_LINK = 'https://w.wiki/5JDL'
-
-HEADING_NEW_ENTRY = "\n<b>新增條目：</b>共有 {num} 個新條目提交評選："
-HEADING_CHANGES_ENTRY = "\n<b>票數變化：</b>共有 {num} 個新條目有票數變化："
-HEADING_ENDED_ENTRY = "\n<b>完成評選：</b>共有 {num} 個新條目評選已完結："
-
-ADDED_ROW = UNORDERED_LIST_MARKER + \
-    "<a href=\"{pagelink}\">{pagename}</a>：{votes_display}{entry_notes}"
-CHANGED_ROW = UNORDERED_LIST_MARKER + \
-    "<a href=\"{pagelink}\">{pagename}</a>：{votes_display} {votes_delta_display}"
-
-REMOVED_ROW = UNORDERED_LIST_MARKER + \
-    "<a href=\"{pagelink}\">{pagename}</a>：{result}"
-REMOVED_RESULT_PASSED = "通過"
-REMOVED_RESULT_FAILED = "不通過"
+DYKC_LINK = r'https://zh.wikipedia.org/wiki/Wikipedia:%E6%96%B0%E6%9D%A1%E7%9B%AE%E6%8E%A8%E8%8D%90/%E5%80%99%E9%80%89'
+TELEGRAM_MESSAGE_FORMAT = "<b>{title}</b>\n\n自上次簡報以來，有 {new} 個新條目提交評選、{diff} 個新條目有票數變化、{end} 個新條目評選已完結。"
 
 
 def generate_votes_display(entry: DYKVoteCount) -> str:
     return f"({entry.vote_support}/{entry.vote_oppose}/{entry.vote_problematic})"
 
 
-def generate_delta_number_display(delta: int) -> str:
+def generate_delta_number_display(delta: int) -> str | dict:
     if delta > 0:
-        return f'<b>+{delta}</b>'
+        return _tag('b', f"+{delta}")
     elif delta < 0:
-        return f'<b>{delta}</b>'
+        return _tag('b', str(delta))
     else:
         return '0'
 
 
-def generate_votes_delta_display(delta: DYKVoteCount) -> str:
-    vote_support = generate_delta_number_display(delta.vote_support)
-    vote_oppose = generate_delta_number_display(delta.vote_oppose)
-    vote_problematic = generate_delta_number_display(delta.vote_problematic)
-    net_change = generate_delta_number_display(
-        delta.vote_support - delta.vote_oppose)
-    return f"({vote_support}/{vote_oppose}/{vote_problematic}) [{net_change}]"
+def generate_votes_delta_display(delta: DYKVoteCount) -> list:
+    return [
+        '(',
+        generate_delta_number_display(delta.vote_support),
+        '/',
+        generate_delta_number_display(delta.vote_oppose),
+        '/',
+        generate_delta_number_display(delta.vote_problematic),
+        ') [',
+        generate_delta_number_display(delta.vote_support - delta.vote_oppose),
+        ']',
+    ]
 
 
-def generate_new_entry_notes(entry: DYKEntry) -> str:
+def generate_new_entry_notes(entry: DYKEntry) -> dict:
     author = entry.entry_author
     nominator = entry.entry_nominator
 
     author_link = "https://zh.wikipedia.org/wiki/User:" + author
     nominator_link = "https://zh.wikipedia.org/wiki/User:" + nominator
 
+    nodes = []
+
     if author == nominator:
-        nomin_string = f"提名/作者：<a href=\"{author_link}\">{author}</a>"
+        nodes.append('（提名/作者：')
+        nodes.append(_tag('a', author, href=author_link))
+        nodes.append('）')
     elif author == '':
-        nomin_string = f"提名：<a href=\"{nominator_link}\">{nominator}</a>；非一人主編"
+        nodes.append('（提名：')
+        nodes.append(_tag('a', nominator, href=nominator_link))
+        nodes.append('；非一人主編）')
     else:
-        nomin_string = f"提名：<a href=\"{nominator_link}\">{nominator}</a>；作者：<a href=\"{author_link}\">{author}</a>"
+        nodes.append('（提名')
+        nodes.append(_tag('a', nominator, href=nominator_link))
+        nodes.append('；作者：')
+        nodes.append(_tag('a', author, href=author_link))
+        nodes.append('）')
 
-    return f"（{nomin_string}；類別：{entry.entry_type}）"
+    return nodes
 
 
-def generate_message_content(diff_report: DYKCDiffReport) -> str:
-    rows: list[str] = []
+def generate_new_entry_line(entry: DYKEntry) -> list:
+    votes_display = generate_votes_display(entry.entry_votes)
+    entry_notes = generate_new_entry_notes(entry)
 
-    now = datetime.now(timezone.utc)
-    rows.append(f"<b>新條目評選每日簡報（{now.year}年{now.month}月{now.day}日）</b>")
-    rows.append(f"自上次簡報以來，以下是<a href=\"{DYKC_SHORT_LINK}\">新條目評選</a>的變化：")
+    nodes = []
+    nodes.append(_tag(
+        'a',
+        _tag('b', entry.entry_article),
+        href=DYKC_LINK + '#' + entry.entry_article
+    ))
+    nodes.append('：' + votes_display)
+    nodes.extend(entry_notes)
 
-    # New entries
-    rows.append(HEADING_NEW_ENTRY.format(num=len(diff_report.new_entries)))
-    for title, entry in diff_report.new_entries.items():
-        votes_display = generate_votes_display(entry.entry_votes)
-        entry_notes = generate_new_entry_notes(entry)
-        rows.append(ADDED_ROW.format(
-            pagelink=DYKC_SHORT_LINK + '#' + title,
-            pagename=title,
-            votes_display=votes_display,
-            entry_notes=entry_notes
-        ))
+    return nodes
 
-    # Vote Differences
-    rows.append(HEADING_CHANGES_ENTRY.format(
-        num=len(diff_report.vote_differences)))
-    for title, delta in diff_report.vote_differences.items():
-        entry = diff_report.new_votes.get(title)
-        entry_votes = entry.entry_votes
 
-        votes_display = generate_votes_display(entry_votes)
-        votes_delta_display = generate_votes_delta_display(delta)
-        rows.append(CHANGED_ROW.format(
-            pagelink=DYKC_SHORT_LINK + '#' + title,
-            pagename=title,
-            votes_display=votes_display,
-            votes_delta_display=votes_delta_display
-        ))
+def generate_vote_diff_line(entry: DYKEntry, diff: DYKVoteCount) -> list:
+    votes_display = generate_votes_display(entry.entry_votes)
+    votes_delta_display = generate_votes_delta_display(diff)
 
-    # Removed entries
-    rows.append(HEADING_ENDED_ENTRY.format(
-        num=len(diff_report.removed_entries)))
-    for title, passed in diff_report.removed_entries.items():
-        result = REMOVED_RESULT_PASSED if passed else REMOVED_RESULT_FAILED
-        fragment = "#新条目推荐讨论" if passed else "#未通过的新条目推荐讨论"
-        rows.append(REMOVED_ROW.format(
-            pagelink="https://zh.wikipedia.org/wiki/" + title + fragment,
-            pagename=title,
-            result=result
-        ))
+    nodes = []
+    nodes.append(_tag(
+        'a',
+        _tag('b', entry.entry_article),
+        href=DYKC_LINK + '#' + entry.entry_article
+    ))
+    nodes.append('：' + votes_display + ' ')
+    nodes.extend(votes_delta_display)
 
-    rows.append("\n" + PLAIN_LIST_MARKER.join([
-        '<a href="https://github.com/Emojigit/zhwiki_nomination_daily_digest/">原始碼</a>',
-        '<a href="https://zh.wikipedia.org/wiki/User_talk:1F616EMO">錯誤回報</a>'
+    return nodes
+
+
+def generate_vote_ended_line(title: str, passed: bool) -> list:
+    result = '通過' if passed else '不通過'
+    fragment = "#新条目推荐讨论" if passed else "#未通过的新条目推荐讨论"
+
+    return [
+        _tag(
+            'a',
+            _tag('b', title),
+            href='https://zh.wikipedia.org/wiki/Talk:' + title + fragment
+        ),
+        '：' + result
+    ]
+
+
+def generate_telegraph_content(diff_report: DYKCDiffReport) -> list:
+    """Generate a newsletter ready for posting onto talk pages.
+
+    Parameters
+    ----------
+    diff_report: DYKCDiffReport
+        The report of vote differeneces.
+
+    Returns
+    -------
+    list
+        List of Nodes for Telegraph
+    """
+
+    nodes = []
+    nodes.append(_tag('p', [
+        '自上次簡報以來，以下是',
+        _tag('a', '新條目評選', href=DYKC_LINK),
+        '的變化：',
     ]))
 
-    print(rows)
-    return "\n".join(rows)
+    # New entries
+    nodes.append(_tag('p', [
+        _tag('b', '新增條目：'),
+        f'共有 {len(diff_report.new_entries)} 個新條目提交評選：',
+    ]))
+    nodes.append(_tag(
+        'ol',
+        [
+            _tag('li', generate_new_entry_line(entry))
+            for entry in diff_report.new_entries.values()
+        ]
+    ))
+
+    # Vote Differences
+    nodes.append(_tag('p', [
+        _tag('b', '票數變化：'),
+        f'共有 {len(diff_report.vote_differences)} 個新條目有票數變化：',
+    ]))
+    nodes.append(_tag(
+        'ol',
+        [
+            _tag('li', generate_vote_diff_line(
+                diff_report.new_votes.get(title),
+                diff
+            ))
+            for title, diff in diff_report.vote_differences.items()
+        ]
+    ))
+
+    # Removed entries
+    nodes.append(_tag('p', [
+        _tag('b', '完成評選：'),
+        f'共有 {len(diff_report.removed_entries)} 個新條目評選已完結：',
+    ]))
+    nodes.append(_tag(
+        'ol',
+        [
+            _tag('li', generate_vote_ended_line(title, passed))
+            for title, passed in diff_report.removed_entries.items()
+        ]
+    ))
+
+    return nodes
 
 
 def send_newsletter_by_diff_report(diff_report: DYKCDiffReport, config: Mapping):
-    message_content = generate_message_content(diff_report)
+    telegraph_content = generate_telegraph_content(diff_report)
 
-    send_daily_digest(message_content, 'HTML', config)
+    now = datetime.now(timezone.utc)
+    title = f"新條目評選每日簡報（{now.year}年{now.month}月{now.day}日）"
+
+    telegraph_url = publish_telegraph_page(title, telegraph_content, config)
+
+    telegram_message = TELEGRAM_MESSAGE_FORMAT.format(
+        title=title,
+        new=len(diff_report.new_entries),
+        diff=len(diff_report.vote_differences),
+        end=len(diff_report.removed_entries)
+    )
+
+    send_telegram_messages(telegram_message, config, {
+        'parse_mode': 'HTML',
+        'link_preview_options': LinkPreviewOptions(url=telegraph_url, prefer_small_media=True)
+    })
