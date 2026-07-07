@@ -46,22 +46,24 @@ def generate_new_entry_notes(entry: DYKEntry) -> dict:
     author_link = "https://zh.wikipedia.org/wiki/User:" + author
     nominator_link = "https://zh.wikipedia.org/wiki/User:" + nominator
 
+    entry_type = entry.entry_type
+
     nodes = []
 
     if author == nominator:
         nodes.append('（提名/作者：')
         nodes.append(_tag('a', author, href=author_link))
-        nodes.append('）')
+        nodes.append(f'；類別：{entry_type}）')
     elif author == '':
         nodes.append('（提名：')
         nodes.append(_tag('a', nominator, href=nominator_link))
-        nodes.append('；非一人主編）')
+        nodes.append(f'；非一人主編；類別：{entry_type}）')
     else:
         nodes.append('（提名')
         nodes.append(_tag('a', nominator, href=nominator_link))
         nodes.append('；作者：')
         nodes.append(_tag('a', author, href=author_link))
-        nodes.append('）')
+        nodes.append(f'；類別：{entry_type}）')
 
     return nodes
 
