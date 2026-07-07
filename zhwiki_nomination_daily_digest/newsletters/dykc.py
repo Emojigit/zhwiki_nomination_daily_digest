@@ -111,9 +111,6 @@ def generate_newsletter_content(diff_report: DYKCDiffReport) -> str:
         row = REMOVED_ROW.format(icon=icon, pagename=title, result=result)
         rows.append(row)
 
-    # Footer
-    rows.append('~~~~')
-
     return '\n'.join(rows)
 
 
@@ -128,6 +125,9 @@ def send_newsletter_by_diff_report(site: Site, diff_report: DYKCDiffReport, conf
         raise ValueError(f"Invalid send_mode: {send_mode}")
 
     newsletter_content = generate_newsletter_content(diff_report)
+
+    footer = config.get('footer', '~~~~~').strip()
+    newsletter_content += "\n\n" + footer
 
     now = datetime.now(timezone.utc)
     newsletter_title = f"新條目評選每日簡報（{now.year}年{now.month}月{now.day}日）"
