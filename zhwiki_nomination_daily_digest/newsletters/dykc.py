@@ -11,6 +11,7 @@ from . import DailyDigestSendMode, send_daily_digest
 DELTA_COLOR_POSITIVE = 'var(--color-content-added,#006400)'
 DELTA_COLOR_NEGATIVE = 'var(--color-content-removed,#8b0000)'
 
+DYKC_USERLINK = "<span class=\"plainlinks\">[//zh.wikipedia.org/wiki/User:{username} {username}]</span>"
 DYKC_LINK_ICON = "[[File:Codex icon arrowNext.svg|15px|link=WP:DYKC#{pagename}|alt=前往評選頁面|class=skin-invert notpageimage]]"
 
 REMOVED_ROW = "* {icon}&nbsp;[[{pagename}]]：{result}"
@@ -52,12 +53,15 @@ def generate_votes_delta_display(delta: DYKVoteCount) -> str:
 def generate_new_entry_notes(entry: DYKEntry) -> str:
     author = entry.entry_author
     nominator = entry.entry_nominator
+
+    author_link = DYKC_USERLINK.format(username=author)
+    nominator_link = DYKC_USERLINK.format(username=nominator)
     if author == nominator:
-        nomin_string = f"提名/作者：[[User:{author}|{author}]]"
+        nomin_string = f"提名/作者：{author_link}"
     elif author == '':
-        nomin_string = f"提名：[[User:{nominator}|{nominator}]]；非一人主編"
+        nomin_string = f"提名：{nominator_link}；非一人主編"
     else:
-        nomin_string = f"提名：[[User:{nominator}|{nominator}]]；作者：[[User:{author}|{author}]]"
+        nomin_string = f"提名：{nominator_link}；作者：{author_link}"
 
     return f"<small>（{nomin_string}；類別：{entry.entry_type}）</small>"
 
